@@ -1,0 +1,315 @@
+---
+title: "ARIMA_test"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-10-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+
+```{r cache = TRUE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(forecast)
+```
+
+
+
+```{r cache = TRUE}
+data <- read.table("gas+sensor+array+under+dynamic+gas+mixtures/ethylene_methane.txt", skip = 1, col.names = c('Time','Methane','Ethylene','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16'))
+```
+Let's do some EDA 
+
+```{r cache = TRUE}
+as.integer(nrow(data))
+```
+```{r cache = TRUE}
+(nrow(data)*0.4)
+```
+# Split into train, test, and deployment sets
+
+```{r cache = TRUE}
+train = data %>% slice(1:as.integer(nrow(data)*0.4))
+test = data %>% slice(as.integer(nrow(data)*0.4):as.integer(nrow(data)*0.7))
+deployment = data %>% slice(as.integer(nrow(data)*0.7):nrow(data))
+```
+
+```{r cache = TRUE}
+train_x = train %>% dplyr::select(Time, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+train_y = train %>% dplyr::select(Methane, Ethylene)
+test_x = test %>% dplyr::select(Time, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+test_y = test %>% dplyr::select(Methane, Ethylene)
+deployment_x = deployment %>% dplyr::select(Time, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+deployment_y = deployment %>% dplyr::select(Methane, Ethylene)
+```
+
+```{r cache = TRUE}
+library(reshape2)
+```
+
+# Plot the data
+
+```{r cache = TRUE}
+
+# Reshaping the data
+long_data <- melt(train_x, id.vars = "Time", measure.vars = c("X1", "X2", "X3", "X4", "X5", "X6", "X7", "X8", "X9", "X10", "X11", "X12", "X13", "X14", "X15", "X16"), variable.name = "Sensor", value.name = "Conductivity")
+
+# Filtering data for the first sensor
+sensor1_data <- long_data[long_data$Sensor == "X1", ]
+
+# Plotting
+plot(sensor1_data$Time, sensor1_data$Conductivity, type = "l", col = 1, xlab = "Time", ylab = "Conductivity", xlim = c(0, 18000), ylim = c(0, 10000))
+
+# Adding lines for other sensors
+colors <- rainbow(length(unique(long_data$Sensor)))
+for (i in 2:length(unique(long_data$Sensor))) {
+  sensor_data <- long_data[long_data$Sensor == paste0("X", i), ]
+  lines(sensor_data$Time, sensor_data$Conductivity, col = colors[i])
+}
+
+# Adding a legend, if necessary
+legend("topleft",legend = unique(long_data$Sensor), col = colors, lty = 1)
+```
+
+# Sensor 2 is broken and sensors are actualizing first 200 seconds
+
+```{r cache = TRUE}
+# Remove first 200 seconds
+train = data %>% slice(20000:as.integer(nrow(data)*0.4))
+# Remove sensor 2
+train_x = train %>% dplyr::select(Time, X1, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+train_y = train %>% dplyr::select(Methane, Ethylene)
+```
+
+
+```{r cache = TRUE}
+# Plot TG - 2602 Sensors
+# Reshaping the data
+tg2602_sensors = c("X1", "X9", "X10")
+long_data <- melt(train_x, id.vars = "Time", measure.vars = tg2602_sensors, variable.name = "Sensor", value.name = "Conductivity")
+
+# Filtering data for the first sensor
+sensor1_data <- long_data[long_data$Sensor == "X1", ]
+
+# Plotting
+plot(sensor1_data$Time, sensor1_data$Conductivity, type = "l", col = 1, xlab = "Time", ylab = "Conductivity", xlim = c(0, 18000), ylim = c(0, 6000))
+
+# Adding lines for other sensors
+colors <- rainbow(length(unique(long_data$Sensor)))
+for (i in 2:length(tg2602_sensors)) {
+  sensor_data <- long_data[long_data$Sensor == tg2602_sensors[i], ]
+  lines(sensor_data$Time, sensor_data$Conductivity, col = colors[i])
+}
+
+# Adding a legend, if necessary
+par(xpd=TRUE)
+legend("topleft",legend = unique(long_data$Sensor), col = colors, lty = 1)
+```
+
+
+```{r cache = TRUE}
+# Plot TG - 2600 Sensors
+# Reshaping the data
+tg2600_sensors = c("X3", "X4", "X11", "X12")
+long_data <- melt(train_x, id.vars = "Time", measure.vars = tg2600_sensors, variable.name = "Sensor", value.name = "Conductivity")
+
+# Filtering data for the first sensor
+sensor1_data <- long_data[long_data$Sensor == tg2600_sensors[0], ]
+
+# Plotting
+plot(sensor1_data$Time, sensor1_data$Conductivity, type = "l", col = 1, xlab = "Time", ylab = "Conductivity", xlim = c(0, 18000), ylim = c(0, 6000))
+
+# Adding lines for other sensors
+colors <- rainbow(length(unique(long_data$Sensor)))
+for (i in 2:length(tg2600_sensors)) {
+  sensor_data <- long_data[long_data$Sensor == tg2600_sensors[i], ]
+  lines(sensor_data$Time, sensor_data$Conductivity, col = colors[i])
+}
+
+# Adding a legend, if necessary
+par(xpd=TRUE)
+legend("topleft",legend = unique(long_data$Sensor), col = colors, lty = 1)
+```
+
+
+
+```{r cache = TRUE}
+#  Reshaping the data
+tg2610_sensors = c("X5", "X6", "X13", "X14")
+long_data <- melt(train_x, id.vars = "Time", measure.vars = tg2610_sensors, variable.name = "Sensor", value.name = "Conductivity")
+
+# Filtering data for the first sensor
+sensor1_data <- long_data[long_data$Sensor == tg2610_sensors[0], ]
+
+# Plotting
+plot(sensor1_data$Time, sensor1_data$Conductivity, type = "l", col = 1, xlab = "Time", ylab = "Conductivity", xlim = c(0, 18000), ylim = c(0, 6000))
+
+# Adding lines for other sensors
+colors <- rainbow(length(unique(long_data$Sensor)))
+for (i in 2:length(tg2610_sensors)) {
+  sensor_data <- long_data[long_data$Sensor == tg2610_sensors[i], ]
+  lines(sensor_data$Time, sensor_data$Conductivity, col = colors[i])
+}
+
+# Adding a legend, if necessary
+par(xpd=TRUE)
+legend("topleft",legend = unique(long_data$Sensor), col = colors, lty = 1)
+```
+
+
+
+```{r cache = TRUE}
+# Plot TG - 2620 Sensors
+#  Reshaping the data
+tg2620_sensors = c("X7", "X8", "X15", "X16")
+long_data <- melt(train_x, id.vars = "Time", measure.vars = tg2620_sensors, variable.name = "Sensor", value.name = "Conductivity")
+
+# Filtering data for the first sensor
+sensor1_data <- long_data[long_data$Sensor == tg2620_sensors[0], ]
+
+# Plotting
+plot(sensor1_data$Time, sensor1_data$Conductivity, type = "l", col = 1, xlab = "Time", ylab = "Conductivity", xlim = c(0, 18000), ylim = c(0, 6000))
+
+# Adding lines for other sensors
+colors <- rainbow(length(unique(long_data$Sensor)))
+for (i in 2:length(tg2620_sensors)) {
+  sensor_data <- long_data[long_data$Sensor == tg2620_sensors[i], ]
+  lines(sensor_data$Time, sensor_data$Conductivity, col = colors[i])
+}
+
+# Adding a legend, if necessary
+par(xpd=TRUE)
+legend("topleft",legend = unique(long_data$Sensor), col = colors, lty = 1)
+```
+
+
+
+
+```{r cache = TRUE}
+# STL Plots
+# frequency = 100 -> 100 observations per second
+train_y_meth_ts = ts(train_y$Methane, frequency = 100)
+plot(stl(train_y_meth_ts, "periodic"))
+train_y_ethy_ts = ts(train_y$Ethylene, frequency = 100)
+plot(stl(train_y_ethy_ts, "periodic"))
+
+```
+
+
+
+
+# Do it with all training data points
+```{r cache = TRUE}
+train_x_no_time = train_x %>% dplyr::select(X1, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+arima_meth = auto.arima(y = train_y$Methane, xreg = data.matrix(train_x_no_time), ic = "bic")
+```
+
+
+
+
+
+```{r cache = TRUE}
+tsdiag(arima_meth)
+```
+```{r cache = TRUE}
+plot(train_y$Methane)
+points(fitted(arima_meth), col = 2, pch = "+")
+
+```
+
+```{r cache = TRUE}
+# Get the forecast
+test_x_no_time = test_x %>% dplyr::select(X1, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16)
+fcast_arima_meth = forecast(arima_meth, xreg = data.matrix(test_x_no_time))
+```
+
+```{r cache = TRUE}
+arimaorder(arima_meth)
+```
+
+
+```{r cache = TRUE}
+plot(test_x$Time, test_y$Methane)
+plot(fcast_arima_meth$mean, col = 2, pch = "+")
+```
+
+
+```{r cache = TRUE}
+plot(fcast_arima_meth)
+```
+
+
+```{r cache = TRUE}
+fcast_arima_meth_resid = test_y$Methane - fcast_arima_meth$mean 
+hist(fcast_arima_meth_resid)
+```
+```{r cache = TRUE}
+plot(test_y$Methane, fcast_arima_meth$mean, xlab = "Actual Values", ylab = "Predicted Values")
+abline(0, 1, col = "red", lwd = 3)
+title(main = "Actual Vs Predicted Values for ARIMA Methane ") 
+```
+# Do Methane
+```{r cache = TRUE}
+arima_ethy = auto.arima(y = train_y$Ethylene, xreg = data.matrix(train_x_no_time), ic = "bic")
+```
+
+
+```{r cache = TRUE}
+arimaorder(arima_meth)
+```
+```{r cache = TRUE}
+fcast_arima_ethy = forecast(arima_ethy, xreg = data.matrix(test_x_no_time))
+```
+  
+```{r cache = TRUE}
+fcast_arima_ethy_resid = test_y$Ethylene - fcast_arima_ethy$mean
+hist(fcast_arima_ethy_resid)
+```
+```{r cache = TRUE}
+plot(test_y$Ethylene, fcast_arima_ethy$mean, xlab = "Actual Values", ylab = "Predicted Values")
+abline(0, 1, col = "red", lwd = 3)
+title(main = "Actual Vs Predicted Values for ARIMA Ethylene ") 
+```
+
+
+```{r cache = TRUE}
+plot(fcast_arima_ethy)
+```
+# Get R^2 and RMSE, RMSE/Range
+
+```{r cache = TRUE}
+rsq <- function (x, y) cor(x, y) ^ 2
+arima_meth_rsq = rsq(test_y$Methane, fcast_arima_meth$mean)
+arima_ethy_rsq = rsq(test_y$Ethylene, fcast_arima_ethy$mean)
+meth_var = var(test_y$Methane)
+ethy_var = var(test_y$Ethylene)
+arima_meth_rmse = sqrt((1 - arima_meth_rsq)*meth_var)
+arima_ethy_rmse = sqrt((1 - arima_ethy_rsq)*ethy_var)
+cat(paste(arima_meth_rsq, arima_ethy_rsq, arima_meth_rmse, arima_ethy_rmse, meth_var, ethy_var, sep = "\n"))
+```
+```{r cache = TRUE}
+range_diff <- function (x) {
+  range_vals = range(x)
+  return(range_vals[2] - range_vals[1])
+}
+arima_meth_rmse_div_range = arima_meth_rmse/range_diff(test_y$Methane) 
+arima_ethy_rmse_div_range = arima_ethy_rmse/range_diff(test_y$Ethylene)
+cat(paste(arima_meth_rmse_div_range, arima_ethy_rmse_div_range, sep = "\n"))
+```
+```{r cache = TRUE}
+tsdiag(arima_ethy)
+```
+```{r cache = TRUE}
+arimaorder(arima_ethy)
+```
+
+# The END!
